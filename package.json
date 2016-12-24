@@ -1,0 +1,17 @@
+{
+  "name": "slack-onboarding-example",
+  "version": "1.0.0",
+  "description": "Example onboarding bot using Slack's Event API, extended",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Robin Luiten <notsurewantemailhere@gmail.com>",
+  "dependencies": {
+    "axios": "^0.13.1",
+    "ws": "^1.1.1",
+		"request": "2.72.0",
+    "mongodb": "*",
+    "synchronize": "^0.9.14",
+    "httpdispatcher":"*"
+  }
+}
