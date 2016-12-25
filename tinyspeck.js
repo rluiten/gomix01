@@ -7,12 +7,12 @@
 //
 "use strict";
 
-const dispatcher = require('httpdispatcher'),
-      http = require('http'),
-      axios = require('axios'),
-      WebSocket = require('ws'),
-      qs = require('querystring'),
-      EventEmitter = require('events');
+const dispatcher = require('httpdispatcher');
+const http = require('http');
+const axios = require('axios');
+const WebSocket = require('ws');
+const qs = require('querystring');
+const EventEmitter = require('events');
 
 class TinySpeck extends EventEmitter {
   /**

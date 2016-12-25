@@ -34,7 +34,7 @@ function set(key, value) {
 }
 
 // Fetches an object from the DynamoDB instance, deserializing it from JSON
-function get(key) {
+function originalGet(key) {
   return new Promise((resolve, reject) => {
     try {
       if (typeof(key) !== "string") {
@@ -45,10 +45,9 @@ function get(key) {
             reject(new DatastoreUnderlyingException(key, err));
           } else {
             try {
-              if (data === null){
+              if (data === null) {
                 resolve(null);
-              }
-              else{
+              } else {
                 resolve(JSON.parse(data.value));
               }
             } catch (ex) {
@@ -61,6 +60,48 @@ function get(key) {
       reject(new DatastoreUnknownException("get", {"key": key}, ex));
     }
   });
+}
+
+function getCore(key) {
+  return new Promise((resolve, reject) => {
+    try {
+      if (typeof(key) !== "string") {
+        reject(new DatastoreKeyNeedToBeStringException(key));
+      } else {
+        collection.findOne({"key":key}, (err, data) => {
+          if (err) {
+            reject(new DatastoreUnderlyingException(key, err));
+          } else {
+            resolve(data);
+          }
+        });
+      }
+    } catch (ex) {
+      reject(new DatastoreUnknownException("get", {"key": key}, ex));
+    }
+  });
+}
+
+function get(key) {
+  return getCore(key)
+    .then(data => {
+      if (data === null) {
+        return null;
+      } else {
+        try {
+          return JSON.parse('{' + data.value);
+        } catch (ex) {
+          throw new DatastoreDataParsingException(data.value, ex)
+        }
+      }
+    })
+    // .catch(reason => {
+    //   // the only reason to get exception is if JSON.parse fails, 
+    //   // but we dont have data here in this new code form.
+    //   // use to log data.value here but dont have it with split.
+    //   // by explict catch of exception above can log the data being parsed to.
+    //   throw new DatastoreDataParsingException('not got value at moment', reason)
+    // });
 }
 
 function remove(key) {
@@ -151,55 +192,57 @@ function DatastoreFiledConnectException(method, args) {
 // -------------------------------------------
 // SYNCHRONOUS WRAPPERS AROUND THE PROMISE API
 // -------------------------------------------
-// not really tested sync, just cleaned up a bit.
-var sync = require("synchronize");
+// Basic tests of sync done see test-datastore-sync.js
+// It is not clear how to use initializeApp.
+// so sync code was tested with 
+//   sync.fiber(function () { /* tests */ });
+//
+const sync = require("synchronize");
 
-function doCallback(func, callback, ...rest) {
+const doCallback = (func, callback, ...rest) =>
   func(...rest)
     .then(value => callback(null, value))
     .catch(err => callback(err, null));
-}
 
-function setSync(key, value) {
-  return sync.await(doCallback(set, sync.defer(), key, value), sync.defer());
-}
+const wrapAsync = (func, ...rest) => 
+  sync.await(doCallback(func, sync.defer(), ...rest));
 
-function getSync(key) {
-  return sync.await(doCallback(get, sync.defer(), key), sync.defer());
-}
-
-function removeSync(key) {
-  return sync.await(doCallback(remove, sync.defer(), key), sync.defer());
-}
-
-function removeManySync(keys) {
-  return sync.await(doCallback(removeMany, sync.defer(), keys), sync.defer());
-}
-
-function connectSync(connectUri, dbCollection) {
-  return sync.await(doCallback(connect, sync.defer(), connectUri, dbCollection), sync.defer());
-}
+const setSync        = (...rest) => wrapAsync(set, ...rest);
+const getSync        = (...rest) => wrapAsync(get, ...rest);
+const removeSync     = (...rest) => wrapAsync(remove, ...rest);
+const removeManySync = (...rest) => wrapAsync(removeMany, ...rest);
+const connectSync    = (...rest) => wrapAsync(connect, ...rest);
 
 function initializeApp(app) {
   app.use((req, res, next) => sync.fiber(next));
 }
 
-var asyncDatastore = {
+const asyncDatastore = {
   set: set,
   get: get,
   remove: remove,
   removeMany: removeMany,
-  connect: connect
+  connect: connect,
 };
 
-var syncDatastore = {
+let syncDatastore = {
   set: setSync,
   get: getSync,
   remove: removeSync,
   removeMany: removeManySync,
-  connect: connectSync,  
-  initializeApp: initializeApp
+  connect: connectSync,
+  initializeApp: initializeApp,
 };
+
+// try to build syncDataStore from asyncDatastore, not working at moment.
+const AsyncDatastore = {};
+for (var key in asyncDatastore) {
+  // console.log('key', key);
+  var func = asyncDatastore[key];
+  AsyncDatastore[key] = (...rest) => wrapAsync(func, ...rest);
+}
+AsyncDatastore.initializeApp = initializeApp;
+// syncDatastore = AsyncDatastore;
 
 module.exports = {
   async: asyncDatastore,

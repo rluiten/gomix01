@@ -18,8 +18,6 @@ For more detailed setup instructions, see `setup.md`.
   Several updates
   1. More consistent use of ES2015 => fat arrow.
   2. Datastore / connect() was not returning on reject() so was running success code on error and throwing additional errors.
-  3. Lots of code dupe in sync code in tinyspeck around sycn code. (not tested yet)
+  3. Lots of code dupe in sync code in datastore. Basics of sync code tested, it is not clear how to use initializeApp so it is not tested.
   4. Moved MONGODB_URI into index.js (should not be in datastore.js IMO) then added parameter to datastore connect(connectUri).
   5. Moved use of process.env.COLLECTION to index.js as parameter to datastore connect(connectUri, dbCollection)
-
-

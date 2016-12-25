@@ -30,39 +30,25 @@ let connected = false;
 //
 // Watch for /count slash command
 slack.on('/count', payload => {
-  console.log("Received /count slash command from user " + payload.user_id, payload);
-  /* payload example.
-  team_id: 'T0259R09H',   team_domain: 'alertrobin',
-  channel_id: 'C0259R09P',   channel_name: 'general',
-  user_id: 'U0259R09K',   user_name: 'berg',
-  command: '/count',   text: '',
-  response_url: 'https://hooks.slack.com/commands/T0259R09H/120488173955/7k8DdqXnZ6WlG8JuvK0QDWAL'
-  */
-  
+  //console.log("Received /count slash command from user " + payload.user_id, payload);
   const { user_id, user_name, response_url, channel_id } = payload;
-  // slack.send(response_url, { channel: user_id, text: 'Burble...' }).catch(() => void 0);
-  // slack.send(response_url, { 
-  //   channel: user_id, 
-  //   text: 'Test from /count slack command <bergle>.',
-  //   response_type: 'in_channel' // make it visible to channel https://api.slack.com/slash-commands
-  // }).catch(() => void 0);  // ignore send failures.
 
   datastore.connect(MONGODB_URI, process.env.COLLECTION)
     .then(
       data => {
         console.log('database.connect() success');
-        datastore.get(user_id) // get the count for the user_id
-          .then(count => {
-            //throw new Error("Hello world");
-            let message = getMessage(user_id, user_name, count);
-            // send current count privately
-            slack.send(response_url, message)
-              .then(res => { // on success
-                console.log("Response sent to /count slash command");
-              }, reason => { // on failure
-                console.log("An error occurred when responding to /count slash command: " + reason);
-              });
-          });
+        return datastore.get(user_id) // get the count for the user_id
+          // .then(count => {
+          //   let message = getMessage(user_id, user_name, count);
+          //   // send current count privately
+          //   slack.send(response_url, message)
+          //     .then(res => { // on success
+          //       console.log("Response sent to /count slash command");
+          //     }, reason => { // on failure
+          //       console.log("An error occurred when responding to /count slash command: " + reason);
+          //     });
+          // })
+          // .catch(reason => console.log(`Error get of users value`, reason));
       }, 
       reason => { 
         console.log('database.connect() error.', reason) 
@@ -71,21 +57,25 @@ slack.on('/count', payload => {
         ).catch(() => void 0); // ignore send failures.
       }
     )
+    .then(count => {
+        let message = getMessage(user_id, user_name, count);
+        // send current count privately
+        slack.send(response_url, message)
+          .then(res => { // on success
+            console.log("Response sent to /count slash command");
+          }, reason => { // on failure
+            console.log("An error occurred when responding to /count slash command: " + reason);
+          });
+      }, reason => console.log(`Error get of users value`, reason)
+    )
     .catch(reason => { console.log('some other error after success connect()', reason) } );
 });
     
 function getMessage(userRef, userName, count) {
-  if (!count){ // no value stored for this user
-    count=1;
-    datastore.set(userRef, count).then(() => { // store initial count value for user
-      console.log("Saved initial count ("+count+") for: " + userRef);
-    });
-  } else { // there was a value stored
-    count++;
-    datastore.set(userRef, count).then(() => { // store updated count value for user
-      console.log("Saved updated count ("+count+") for: " + userRef);
-    });
-  }
+  count = count ? count + 1 : 1;
+  datastore.set(userRef, count).then(() => {
+    console.log(`Saved count ("${count}") for: ${userRef} (1 is initial count value if not previously set)`);
+  });
   // return Object.assign({ channel: userRef, text: "Current count is: " + count });
   return { 
     channel: userRef, 
