@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Example onboarding bot using Slack's Event API, extended",
   "scripts": {
-    "start": "node index.js"
+    "start": "node test-datastore-sync.js"
   },
   "author": "Robin Luiten <notsurewantemailhere@gmail.com>",
   "dependencies": {

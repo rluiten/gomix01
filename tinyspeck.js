@@ -31,7 +31,6 @@ class TinySpeck extends EventEmitter {
     this.on('error', console.error);
   }
 
-
   /**
    * Create an instance of the TinySpeck adapter
    *
@@ -41,7 +40,6 @@ class TinySpeck extends EventEmitter {
   instance(defaults) {
     return new this.constructor(defaults);
   }
-
 
   /**
    * Send data to Slack's API
@@ -59,14 +57,17 @@ class TinySpeck extends EventEmitter {
     if (typeof args[0] === 'string') endPoint = args.shift();
 
     // use defaults when available
+    // note: using assign() to copy arg0 to index [0] to use with post is to tricky. Robin.
     let message = Object.assign({}, this.defaults, args);
     
+    // note: there is no way to get a timestamp unless it its set in defaults..
+    // which is very odd way to set timestamp.. USED by rtm more than anything else it seems.
+    
     // call update if ts included
-    if (message.ts && endPoint === 'chat.postMessage') endPoint = 'chat.update';
+    if (message.ts) endPoint = 'chat.update';
     
     return this.post(endPoint, message);
   }
-
 
   /**
    * Parse a Slack message
@@ -86,7 +87,6 @@ class TinySpeck extends EventEmitter {
     return message;
   }
 
-
   /**
    * Digest a Slack message and process events
    *
@@ -94,12 +94,20 @@ class TinySpeck extends EventEmitter {
    * @return {Message} The parsed message
    */
   digest(message) {
-    let event_ts = this.parse(message).event_ts;
-    let event = this.parse(message).event;
-    let command = this.parse(message).command;
-    let type = this.parse(message).type;
-    let trigger_word = this.parse(message).trigger_word;
-    let payload = this.parse(message).payload;
+    // let event_ts = this.parse(message).event_ts;
+    // let event = this.parse(message).event;
+    // let command = this.parse(message).command;
+    // let type = this.parse(message).type;
+    // let trigger_word = this.parse(message).trigger_word;
+    // let payload = this.parse(message).payload;
+    const { event_ts, event, command, type, trigger_word, payload }
+      = this.parse(message);
+      
+    // NOTE: bit concerned that emits of all these different fields
+    // overlap in namespace, so emit of type "important" can only be
+    // separated from command "important" by examining the message.
+    //
+    // IDEA: prefix emits with field name. `type:${type}`
     
     // wildcard
     this.emit('*', message);
@@ -122,7 +130,6 @@ class TinySpeck extends EventEmitter {
     return message;
   }
 
-
   /**
    * Event handler for incoming messages
    *
@@ -136,7 +143,6 @@ class TinySpeck extends EventEmitter {
 
     return this; // chaining support
   }
-
 
   /**
    * Start RTM
@@ -155,7 +161,6 @@ class TinySpeck extends EventEmitter {
     });
   }
 
-
  /**
    * WebServer to listen for WebHooks
    *
@@ -168,7 +173,15 @@ class TinySpeck extends EventEmitter {
     // Display the Add to Slack button
     dispatcher.onGet("/", function(req, res) {
       res.writeHead(200, {'Content-Type': 'text/html'});
-      let html = '<h2>Example Slack Slash Command Handler</h2><br /><a id="add-to-slack" href="https://slack.com/apps/A0F82E8CA-slash-commands"><img alt="Add to Slack" height="40" width="139" src="https://platform.slack-edge.com/img/add_to_slack.png" srcset="https://platform.slack-edge.com/img/add_to_slack.png 1x, https://platform.slack-edge.com/img/add_to_slack@2x.png 2x" /></a><br><br><br><hr><p><a href="https://gomix.com/#!/remix/slash-command/a9e55c25-bf40-4162-b1b5-dc33047c0cdc"><img src="https://gomix.com/images/background-light/remix-on-gomix.svg"></a></p><p><a href="https://gomix.com/#!/project/slash-command">View Code</a></p>';
+      const html = '<h2>ButterCat. Example Slack Slash Command Handler</h2>'
+      + '<br /><a id="add-to-slack" href="https://slack.com/apps/A0F82E8CA-slash-commands">' 
+      + '<img alt="Add to Slack" height="40" width="139"' 
+        + ' src="https://platform.slack-edge.com/img/add_to_slack.png"' 
+        + ' srcset="https://platform.slack-edge.com/img/add_to_slack.png 1x,' 
+        + ' https://platform.slack-edge.com/img/add_to_slack@2x.png 2x" /></a><br><br><br><hr>' 
+      + '<p><a href="https://gomix.com/#!/remix/slash-command/a9e55c25-bf40-4162-b1b5-dc33047c0cdc">' 
+      + '<img src="https://gomix.com/images/background-light/remix-on-gomix.svg"></a></p>' 
+      + '<p><a href="https://gomix.com/#!/project/slash-command">View Code</a></p>';
       res.end(html);
     });     
     
@@ -178,7 +191,7 @@ class TinySpeck extends EventEmitter {
       req.on('data', chunk => data += chunk);
       
       req.on('end', () => {
-        let message = this.parse(data);
+        const message = this.parse(data);
 
         // notify upon request
         this.emit(req.url, message); 
@@ -188,6 +201,7 @@ class TinySpeck extends EventEmitter {
           console.log("No token received");
         }
         else if (process.env.SLACK_TOKEN === message.token){
+          console.log('listen, slack token matches, do call digest()');
           // Token matches - proceeding to process message
           this.digest(message);
         } else {
@@ -204,7 +218,6 @@ class TinySpeck extends EventEmitter {
       console.log(`listening for events on port ${port}`);
     });
   }
-
 
   /**
    * POST data to Slack's API

@@ -89,19 +89,12 @@ function get(key) {
         return null;
       } else {
         try {
-          return JSON.parse('{' + data.value);
+          return JSON.parse(data.value);
         } catch (ex) {
-          throw new DatastoreDataParsingException(data.value, ex)
+          throw new DatastoreDataParsingException(data.value, ex);
         }
       }
-    })
-    // .catch(reason => {
-    //   // the only reason to get exception is if JSON.parse fails, 
-    //   // but we dont have data here in this new code form.
-    //   // use to log data.value here but dont have it with split.
-    //   // by explict catch of exception above can log the data being parsed to.
-    //   throw new DatastoreDataParsingException('not got value at moment', reason)
-    // });
+    });
 }
 
 function remove(key) {
@@ -192,29 +185,26 @@ function DatastoreFiledConnectException(method, args) {
 // -------------------------------------------
 // SYNCHRONOUS WRAPPERS AROUND THE PROMISE API
 // -------------------------------------------
-// Basic tests of sync done see test-datastore-sync.js
-// It is not clear how to use initializeApp.
-// so sync code was tested with 
-//   sync.fiber(function () { /* tests */ });
-//
 const sync = require("synchronize");
 
-const doCallback = (func, callback, ...rest) =>
+const promiseToCallback = (func, callback, ...rest) =>
   func(...rest)
     .then(value => callback(null, value))
     .catch(err => callback(err, null));
 
-const wrapAsync = (func, ...rest) => 
-  sync.await(doCallback(func, sync.defer(), ...rest));
+// Create a sync version of async function using synchronize.
+const makeSync = (f) => 
+  (...rest) => sync.await(promiseToCallback(f, sync.defer(), ...rest))
 
-const setSync        = (...rest) => wrapAsync(set, ...rest);
-const getSync        = (...rest) => wrapAsync(get, ...rest);
-const removeSync     = (...rest) => wrapAsync(remove, ...rest);
-const removeManySync = (...rest) => wrapAsync(removeMany, ...rest);
-const connectSync    = (...rest) => wrapAsync(connect, ...rest);
-
+// This signature appears to be express middleware form.
 function initializeApp(app) {
   app.use((req, res, next) => sync.fiber(next));
+}
+
+// Build sync calls from async.
+function buildSync(sync, async) {
+  for (var key in async) { sync[key] = makeSync(async[key]); }
+  return sync;
 }
 
 const asyncDatastore = {
@@ -225,24 +215,7 @@ const asyncDatastore = {
   connect: connect,
 };
 
-let syncDatastore = {
-  set: setSync,
-  get: getSync,
-  remove: removeSync,
-  removeMany: removeManySync,
-  connect: connectSync,
-  initializeApp: initializeApp,
-};
-
-// try to build syncDataStore from asyncDatastore, not working at moment.
-const AsyncDatastore = {};
-for (var key in asyncDatastore) {
-  // console.log('key', key);
-  var func = asyncDatastore[key];
-  AsyncDatastore[key] = (...rest) => wrapAsync(func, ...rest);
-}
-AsyncDatastore.initializeApp = initializeApp;
-// syncDatastore = AsyncDatastore;
+const syncDatastore = buildSync({ initializeApp }, asyncDatastore);
 
 module.exports = {
   async: asyncDatastore,
