@@ -1,17 +1,19 @@
 {
-  "name": "slack-onboarding-example",
-  "version": "1.0.0",
-  "description": "Example onboarding bot using Slack's Event API, extended",
-  "scripts": {
-    "start": "node test-datastore-sync.js"
-  },
-  "author": "Robin Luiten <notsurewantemailhere@gmail.com>",
-  "dependencies": {
-    "axios": "^0.13.1",
-    "ws": "^1.1.1",
-		"request": "2.72.0",
-    "mongodb": "*",
-    "synchronize": "^0.9.14",
-    "httpdispatcher":"*"
-  }
+	"name": "derived-slack-onboarding-example",
+	"version": "0.0.1",
+	"description": "Example onboarding bot using Slack's Event API",
+	"main": "server.js",
+	"scripts": {
+		"start": "node index.js"
+	},
+	"dependencies": {
+		"axios": "^0.15.3",
+		"ws": "^1.1.1",
+		"request": "^2.79.0",
+		"httpdispatcher": "^2.0.1",
+		"sqlite3": "^3.1.8",
+		"sequelize": "^3.28.0",
+		"express": "^4.14.0"
+	},
+	"license": "MIT"
 }

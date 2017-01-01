@@ -1,170 +1,82 @@
-"use strict";
+var Sequelize = require('sequelize');
+var sequelize = new Sequelize('database', process.env.DB_USER, process.env.DB_PASS, {
+  // host: '0.0.0.0',
+  // data is stored in memory, change storage type for persistence
+  // http://sequelize.readthedocs.io/en/latest/api/sequelize/
+  dialect: 'sqlite',
+  // pool: {
+  //   max: 5,
+  //   min: 0,
+  //   idle: 10000
+  // },
+  //storage:':memory:' // default
+  // Security note: the database is saved to the file `database.sqlite` on the local filesystem. It's deliberately placed in the `.data` directory
+  // which doesn't get copied if someone remixes the project.
+  storage: '.data/database.sqlite',
+  logging: console.log.bind(console),
+  benchmark: true,
+});
 
-var mongodb = require('mongodb');
-var collection;
+var Token;
+var UserReaction;
 
-// ------------------------------
-// ASYNCHRONOUS PROMISE-BASED API
-//  SEE BELOW FOR SYNCHRONOUS API
-// ------------------------------
-
-// Serializes an object to JSON and stores it to the database
+// Improved set(). Stores key-value pair in database
 function set(key, value) {
-  return new Promise((resolve, reject) => {
-    if (typeof(key) !== "string") {
-      reject(new DatastoreKeyNeedToBeStringException(key));
-    } else {
-      try {
-        var serializedValue = JSON.stringify(value);
-        collection.updateOne({"key": key}, 
-          {$set: {"value": serializedValue}}, {upsert:true}, 
-          (err, res) => {
-            if (err) {
-              reject(new DatastoreUnderlyingException(value, err));
-            } else {
-              resolve(res);
-            }
-          }
-        );
-      } catch (ex) {
-        reject(new DatastoreValueSerializationException(value, ex));
-      }
-    }
-  });
-}
-
-// Fetches an object from the DynamoDB instance, deserializing it from JSON
-function originalGet(key) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (typeof(key) !== "string") {
-        reject(new DatastoreKeyNeedToBeStringException(key));
-      } else {
-        collection.findOne({"key":key}, (err, data) => {
-          if (err) {
-            reject(new DatastoreUnderlyingException(key, err));
-          } else {
-            try {
-              if (data === null) {
-                resolve(null);
-              } else {
-                resolve(JSON.parse(data.value));
-              }
-            } catch (ex) {
-              reject(new DatastoreDataParsingException(data.value, ex));
-            }
-          }
-        });
-      }
-    } catch (ex) {
-      reject(new DatastoreUnknownException("get", {"key": key}, ex));
-    }
-  });
-}
-
-function getCore(key) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (typeof(key) !== "string") {
-        reject(new DatastoreKeyNeedToBeStringException(key));
-      } else {
-        collection.findOne({"key":key}, (err, data) => {
-          if (err) {
-            reject(new DatastoreUnderlyingException(key, err));
-          } else {
-            resolve(data);
-          }
-        });
-      }
-    } catch (ex) {
-      reject(new DatastoreUnknownException("get", {"key": key}, ex));
-    }
-  });
-}
-
-function get(key) {
-  return getCore(key)
-    .then(data => {
-      if (data === null) {
-        return null;
-      } else {
-        try {
-          return JSON.parse(data.value);
-        } catch (ex) {
-          throw new DatastoreDataParsingException(data.value, ex);
-        }
-      }
+  if (typeof(key) !== 'string')
+    return Promise.reject(new DatastoreKeyNeedToBeStringException(key));
+    
+  return Token.find({ where: { key } })
+    .then(token => {
+      return token
+        ? token.update({ value })
+        : Token.create({ key, value });
     });
 }
 
-function remove(key) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (typeof(key) !== "string") {
-        reject(new DatastoreKeyNeedToBeStringException(key));
-      } else {
-        collection.deleteOne({"key": key}, (err, res) => {
-          if (err) {
-            reject(new DatastoreUnderlyingException(key, err));
-          } else {
-            resolve(res);
-          }
-        });
-      }
-    } catch (ex) {
-      reject(new DatastoreUnknownException("remove", {"key": key}, ex));
-    }
-  });
+// improved get(). Fetches the value matching key from the database.
+function get(key) {
+  if (typeof(key) !== 'string') 
+    return Promise.reject(new DatastoreKeyNeedToBeStringException(key));
+
+  return Token.findOne({ where: { key } }).then(resolveValue);
 }
 
-function removeMany(keys) {
-  return Promise.all(keys.map((key) => {
-    return remove(key);
-  }));
-}
-
-function connect(connectUri, dbCollection) {
-  return new Promise((resolve, reject) => {
-    try {
-      mongodb.MongoClient.connect(connectUri, (err, db) => {
-        if (err) {
-          reject(err);
-        } else {
-          collection = db.collection(dbCollection);
-          resolve(collection);
-        }
+// Untested.
+// rewrite... use sequelize promise api in more idiomatic way.
+function connect() {
+  return sequelize.authenticate()
+    .then(_ => {
+      console.log('Connection has been established successfully.');
+      // side effects set of Token seems not a good idea.
+      // define a new table 'token' 
+      Token = sequelize.define('token', {
+          key: { 
+            type: Sequelize.STRING 
+          },
+          value: { 
+            type: Sequelize.STRING 
+          },
       });
-    } catch(ex) {
-      reject(new DatastoreUnknownException("connect", null, ex));
-    }
-  });
+      UserReaction = sequelize.define('userReaction', {
+          userId: { type: Sequelize.STRING },
+          reaction: { type: Sequelize.STRING},
+          addCount: { type: Sequelize.STRING}, // string so bigger than 32 bit int 
+          removeCount: { type: Sequelize.STRING}, // string so bigger than 32 bit int 
+      });
+      return Promise.all([Token.sync(), UserReaction.sync()]);
+    })
+    .then(_ => Token)
+    .catch(err => {
+      console.log('Unable to connect to the database: ', err);
+      // throw in a promise then or catch causes promise result to reject.
+      throw new DatastoreUnknownException("connect", null, err); // improve err message.
+    });
 }
 
 function DatastoreKeyNeedToBeStringException(keyObject) {
   this.type = this.constructor.name;
-  this.description = "Datastore can only use strings as keys, got " + keyObject.constructor.name + " instead.";
+  this.description = `Datastore can only use strings as keys, got ${keyObject.constructor.name} instead.`;
   this.key = keyObject;
-}
-
-function DatastoreValueSerializationException(value, ex) {
-  this.type = this.constructor.name;
-  this.description = "Failed to serialize the value to JSON";
-  this.value = value;
-  this.error = ex;
-}
-
-function DatastoreDataParsingException(data, ex) {
-  this.type = this.constructor.name;
-  this.description = "Failed to deserialize object from JSON";
-  this.data = data;
-  this.error = ex;
-}
-
-function DatastoreUnderlyingException(params, ex) {
-  this.type = this.constructor.name;
-  this.description = "The underlying DynamoDB instance returned an error";
-  this.params = params;
-  this.error = ex;
 }
 
 function DatastoreUnknownException(method, args, ex) {
@@ -175,49 +87,55 @@ function DatastoreUnknownException(method, args, ex) {
   this.error = ex;
 }
 
-function DatastoreFiledConnectException(method, args) {
-  this.type = this.constructor.name;
-  this.description = "Failed to connecto to database " + method;
-  this.method = method;
-  this.args = args;
+function resolveValue(data) {
+  // console.log('resolveDataValue', data);
+  return (data === null) ? null : data.value;
 }
 
-// -------------------------------------------
-// SYNCHRONOUS WRAPPERS AROUND THE PROMISE API
-// -------------------------------------------
-const sync = require("synchronize");
-
-const promiseToCallback = (func, callback, ...rest) =>
-  func(...rest)
-    .then(value => callback(null, value))
-    .catch(err => callback(err, null));
-
-// Create a sync version of async function using synchronize.
-const makeSync = (f) => 
-  (...rest) => sync.await(promiseToCallback(f, sync.defer(), ...rest))
-
-// This signature appears to be express middleware form.
-function initializeApp(app) {
-  app.use((req, res, next) => sync.fiber(next));
+// raw: true just the data set not ancillary functions options etc.
+// ? , include: { paranoid: true}
+function getAll() {
+  return Token.findAll({ raw: true });
 }
 
-// Build sync calls from async.
-function buildSync(sync, async) {
-  for (var key in async) { sync[key] = makeSync(async[key]); }
-  return sync;
+function count() {
+  return Token.count();
 }
 
-const asyncDatastore = {
-  set: set,
-  get: get,
-  remove: remove,
-  removeMany: removeMany,
-  connect: connect,
+function userReactionCount() {
+  return UserReaction.count();
+}
+
+function setUserAction(userId, reaction, isAdd) {
+  return UserReaction.find({ where: { userId, reaction } })
+    .then(userReaction => {
+      let [addCount, removeCount] = isAdd ? [1, 0] : [0, 1];
+      if (userReaction) {
+        // console.log('userReaction', userReaction.addCount ? typeof(userReaction.addCount) : '_');
+        addCount += parseInt(userReaction.addCount, 10);
+        removeCount += parseInt(userReaction.removeCount, 10);
+      }
+      return userReaction
+        ? userReaction.update({ addCount, removeCount })
+        : UserReaction.create({ userId, reaction, addCount, removeCount });
+    });
+}
+
+function getAllReactions() {
+  return UserReaction.findAll({ raw: true });
+}
+
+var datastore = {
+  set,
+  get,
+  connect,
+  getAll,
+  count,
+  setUserAction,
+  userReactionCount,
+  getAllReactions,
 };
 
-const syncDatastore = buildSync({ initializeApp }, asyncDatastore);
-
 module.exports = {
-  async: asyncDatastore,
-  sync: syncDatastore
+  data: datastore
 };
